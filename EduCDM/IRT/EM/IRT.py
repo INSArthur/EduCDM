@@ -8,10 +8,11 @@ from tqdm import tqdm
 from scipy import stats
 from ..irt import irt3pl
 from EduCDM import CDM
+import matplotlib.pyplot as plt
 
 
-def init_parameters(prob_num, dim):
-    alpha = stats.norm.rvs(loc=0.75, scale=0.01, size=(prob_num, dim))
+def init_parameters(prob_num, dim): # Initialisation des paramètres du 3 PL
+    alpha = stats.norm.rvs(loc=0.75, scale=0.01, size=(prob_num, dim)) # generate random number of a gaussian distribution of mean "loc", and std deviation "scale"
     beta = stats.norm.rvs(size=(prob_num, dim))
     gamma = stats.uniform.rvs(size=prob_num)
     return alpha, beta, gamma
@@ -19,17 +20,20 @@ def init_parameters(prob_num, dim):
 
 def init_prior_prof_distribution(dim):
     prof = stats.uniform.rvs(loc=-4, scale=8, size=(100, dim))  # shape = (100,dim)
-    dis = stats.multivariate_normal.pdf(prof, mean=np.zeros(dim), cov=np.identity(dim))
-    norm_dis = dis / np.sum(dis)  # shape = (100,)
+    dis = stats.multivariate_normal.pdf(prof, mean=np.zeros(dim), cov=np.identity(dim)) #gérère les probabilités des points aléatoires issus d'une distribution uniforme, selon la distribu (mu=0,sigma=1)
+    norm_dis = dis / np.sum(dis)  # shape = (100,) #Normalisation de la distribution pour que son intégrale =1 ?
     return prof, norm_dis
 
 
 def get_Likelihood(a, b, c, prof, R):
     stu_num, prob_num = R.shape[0], R.shape[1]
     prof_prob = irt3pl(np.sum(a * (np.expand_dims(prof, axis=1) - b), axis=-1), 1, 0, c)  # shape = (100, prob_num)
-    tmp1, tmp2 = np.zeros(shape=(prob_num, stu_num)), np.zeros(shape=(prob_num, stu_num))
-    tmp1[np.where(R == 1)[1], np.where(R == 1)[0]] = 1
-    tmp2[np.where(R == 0)[1], np.where(R == 0)[0]] = 1
+    #tmp1, tmp2 = np.zeros(shape=(prob_num, stu_num)), np.zeros(shape=(prob_num, stu_num))
+    #tmp1[np.where(R == 1)[1], np.where(R == 1)[0]] = 1
+    #tmp2[np.where(R == 0)[1], np.where(R == 0)[0]] = 1
+    Rt = np.transpose(R)
+    tmp1 = np.where(Rt==-1,0,Rt)
+    tmp2 = np.where(Rt == 0, 1, 0)
     prob_stu = np.exp(np.dot(np.log(prof_prob + 1e-9), tmp1) + np.dot(np.log(1 - prof_prob + 1e-9), tmp2))
     return prof_prob, prob_stu
 
@@ -80,9 +84,10 @@ class IRT(CDM):
     """
     def __init__(self, R, stu_num, prob_num, dim=1, skip_value=-1):
         super(IRT, self).__init__()
-        self.R, self.skip_value = R, skip_value
+        print('comment ça va ?')
+        self.R, self.skip_value = R, skip_value # : matrice Student_id x item_id -> score de la réponse
         self.stu_num, self.prob_num, self.dim = stu_num, prob_num, dim
-        self.a, self.b, self.c = init_parameters(prob_num, dim)  # IRT parameters
+        self.a, self.b, self.c = init_parameters(prob_num, dim)  # IRT parameters (only one sigmoid ?)
         self.D = 1.702
         self.prof, self.prior_dis = init_prior_prof_distribution(dim)
         self.stu_prof = np.zeros(shape=(stu_num, dim))
