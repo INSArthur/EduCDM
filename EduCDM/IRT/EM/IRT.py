@@ -27,13 +27,24 @@ def init_prior_prof_distribution(dim):
 
 def get_Likelihood(a, b, c, prof, R):
     stu_num, prob_num = R.shape[0], R.shape[1]
+
     prof_prob = irt3pl(np.sum(a * (np.expand_dims(prof, axis=1) - b), axis=-1), 1, 0, c)  # shape = (100, prob_num)
-    #tmp1, tmp2 = np.zeros(shape=(prob_num, stu_num)), np.zeros(shape=(prob_num, stu_num))
-    #tmp1[np.where(R == 1)[1], np.where(R == 1)[0]] = 1
-    #tmp2[np.where(R == 0)[1], np.where(R == 0)[0]] = 1
-    Rt = np.transpose(R)
-    tmp1 = np.where(Rt==-1,0,Rt)
-    tmp2 = np.where(Rt == 0, 1, 0)
+    tmp1, tmp2 = np.zeros(shape=(prob_num, stu_num)), np.zeros(shape=(prob_num, stu_num))
+    tmp1[np.where(R == 1)[1], np.where(R == 1)[0]] = 1
+    tmp2[np.where(R == 0)[1], np.where(R == 0)[0]] = 1
+    # Rt = np.transpose(R)
+    #
+    # for i in range(Rt.shape[0]) :
+    #     for j in range(Rt.shape[1]) :
+    #         if Rt[i,j] == -1 :
+    #             tmp1[i,j] = 0
+    #         else :
+    #             tmp1[i,j] = Rt[i,j]
+    #             if Rt[i,j] == 0 :
+    #                 tmp2[i, j] = 1
+
+    #tmp1 = np.where(Rt==-1,0,Rt)
+    #tmp2 = np.where(Rt == 0, 1, 0)
     prob_stu = np.exp(np.dot(np.log(prof_prob + 1e-9), tmp1) + np.dot(np.log(1 - prof_prob + 1e-9), tmp2))
     return prof_prob, prob_stu
 
@@ -84,7 +95,6 @@ class IRT(CDM):
     """
     def __init__(self, R, stu_num, prob_num, dim=1, skip_value=-1):
         super(IRT, self).__init__()
-        print('comment ça va ?')
         self.R, self.skip_value = R, skip_value # : matrice Student_id x item_id -> score de la réponse
         self.stu_num, self.prob_num, self.dim = stu_num, prob_num, dim
         self.a, self.b, self.c = init_parameters(prob_num, dim)  # IRT parameters (only one sigmoid ?)
@@ -92,6 +102,14 @@ class IRT(CDM):
         self.prof, self.prior_dis = init_prior_prof_distribution(dim)
         self.stu_prof = np.zeros(shape=(stu_num, dim))
 
+    def update(self,studentId,itemId, score,lr,epoch):
+        self.R[studentId,itemId] = score
+        self.train(lr,epoch)
+
+    def cal_loss(self,data):
+        pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
+        loss = np.average(np.abs(pred_score[np.array(data['user_id']-1), np.array(data['item_id']-1)] - np.array(data['score'])))
+        return loss, pred_score
     def train(self, lr, epoch, epoch_m=10, epsilon=1e-3):
         a, b, c = np.copy(self.a), np.copy(self.b), np.copy(self.c)
         prior_dis = np.copy(self.prior_dis)
@@ -115,12 +133,15 @@ class IRT(CDM):
 
     def eval(self, test_data) -> tuple:
         pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
-        test_rmse, test_mae = [], []
+        test_rmse, test_mae, accuracy = [], [], []
         for i in tqdm(test_data, "evaluating"):
             stu, test_id, true_score = i['user_id'], i['item_id'], i['score']
-            test_rmse.append((pred_score[stu, test_id] - true_score) ** 2)
+            test_rmse.append((pred_score[stu, test_id] == true_score) ** 2)
             test_mae.append(abs(pred_score[stu, test_id] - true_score))
-        return np.sqrt(np.average(test_rmse)), np.average(test_mae)
+            accuracy.append(pred_score[stu, test_id] == true_score)
+        accuracy = np.ndarray(accuracy)
+
+        return np.sqrt(np.average(test_rmse)), np.average(test_mae), np.sum(accuracy)/accuracy.shape[0]
 
     def save(self, filepath):
         with open(filepath, 'wb') as file:
@@ -141,7 +162,7 @@ class IRT(CDM):
     def transform(self, records, lr=1e-3, epoch=10, epsilon=1e-3):  # MLE for evaluating students' state
         # can evaluate multiple students' states simultaneously, thus output shape = (stu_num, dim)
         # initialization stu_prof, shape = (stu_num, dim)
-        if len(records.shape) == 1:  # one student
+        if len(records.shape) == 1:  # one dimension only -> one student only
             records = np.expand_dims(records, axis=0)
         _, prof_stu_like = get_Likelihood(self.a, self.b, self.c, self.prof, records)
         stu_prof = self.prof[np.argmax(prof_stu_like, axis=0)]
