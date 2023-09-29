@@ -107,6 +107,7 @@ class MIRT(CDM):
         self.irt_net.eval()
         y_pred = []
         y_true = []
+        users = []
         for batch_data in tqdm(test_data, "evaluating"):
             user_id, item_id, response = batch_data
             user_id: torch.Tensor = user_id.to(device)
@@ -114,9 +115,11 @@ class MIRT(CDM):
             pred: torch.Tensor = self.irt_net(user_id, item_id)
             y_pred.extend(pred.tolist())
             y_true.extend(response.tolist())
+            users.extend(user_id.tolist())
 
         self.irt_net.train()
-        return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
+        correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
+        return correctness, np.array((users))
 
     def save(self, filepath):
         torch.save(self.irt_net.state_dict(), filepath)

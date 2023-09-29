@@ -133,15 +133,23 @@ class IRT(CDM):
 
     def eval(self, test_data) -> tuple:
         pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
-        test_rmse, test_mae, accuracy = [], [], []
+        correctness = []
+        users = []
+
         for i in tqdm(test_data, "evaluating"):
             stu, test_id, true_score = i['user_id'], i['item_id'], i['score']
-            test_rmse.append((pred_score[stu, test_id] == true_score) ** 2)
-            test_mae.append(abs(pred_score[stu, test_id] - true_score))
-            accuracy.append(pred_score[stu, test_id] == true_score)
-        accuracy = np.ndarray(accuracy)
+            correctness.append((pred_score[stu, test_id] - true_score)<0.5)
+            users.append(stu)
+        # test_rmse, test_mae, accuracy = [], [], []
+        # for i in tqdm(test_data, "evaluating"):
+        #     stu, test_id, true_score = i['user_id'], i['item_id'], i['score']
+        #     test_rmse.append((pred_score[stu, test_id] == true_score) ** 2)
+        #     test_mae.append(abs(pred_score[stu, test_id] - true_score))
+        #     accuracy.append(abs(pred_score[stu, test_id] - true_score)<=0.5)
 
-        return np.sqrt(np.average(test_rmse)), np.average(test_mae), np.sum(accuracy)/accuracy.shape[0]
+        # accuracy = np.array(accuracy)
+
+        return  np.array(correctness),np.array(users)
 
     def save(self, filepath):
         with open(filepath, 'wb') as file:
