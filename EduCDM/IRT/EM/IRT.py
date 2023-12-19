@@ -138,7 +138,7 @@ class IRT(CDM):
 
         for i in tqdm(test_data, "evaluating"):
             stu, test_id, true_score = i['user_id'], i['item_id'], i['score']
-            correctness.append((pred_score[stu, test_id] - true_score)<0.5)
+            correctness.append(np.abs(pred_score[stu, test_id] - true_score)<0.5)
             users.append(stu)
         # test_rmse, test_mae, accuracy = [], [], []
         # for i in tqdm(test_data, "evaluating"):
