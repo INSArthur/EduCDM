@@ -8,6 +8,8 @@ from tqdm import tqdm
 from scipy import stats
 from ..irt import irt3pl
 from EduCDM import CDM
+from torcheval.metrics import BinaryAUROC
+import torch
 import matplotlib.pyplot as plt
 
 
@@ -93,7 +95,7 @@ class IRT(CDM):
         skip value in response matrix
     ----------
     """
-    def __init__(self, R, stu_num, prob_num, dim=1, skip_value=-1):
+    def __init__(self, R, stu_num, prob_num, dim=1, skip_value=-1,common=None):
         super(IRT, self).__init__()
         self.R, self.skip_value = R, skip_value # : matrice Student_id x item_id -> score de la réponse
         self.stu_num, self.prob_num, self.dim = stu_num, prob_num, dim
@@ -101,6 +103,7 @@ class IRT(CDM):
         self.D = 1.702
         self.prof, self.prior_dis = init_prior_prof_distribution(dim)
         self.stu_prof = np.zeros(shape=(stu_num, dim))
+        self.common = common
 
     def update(self,studentId,itemId, score,lr,epoch):
         self.R[studentId,itemId] = score
@@ -110,36 +113,85 @@ class IRT(CDM):
         pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
         loss = np.average(np.abs(pred_score[np.array(data['user_id']-1), np.array(data['item_id']-1)] - np.array(data['score'])))
         return loss, pred_score
-    def train(self, lr, epoch, epoch_m=10, epsilon=1e-3):
+    def train(self, lr, epoch, epoch_m=10, epsilon=1e-3, test_data=None):
         a, b, c = np.copy(self.a), np.copy(self.b), np.copy(self.c)
         prior_dis = np.copy(self.prior_dis)
-        for iteration in range(epoch):
-            a_tmp, b_tmp, c_tmp, prior_dis_tmp = np.copy(a), np.copy(b), np.copy(c), np.copy(prior_dis)
-            prof_prob_like, prof_stu_like = get_Likelihood(a, b, c, self.prof, self.R)
-            prior_dis, norm_dis_like = update_prior(prior_dis, prof_stu_like)
+        best_metrics = []
+        best_acc = 0
+        best_ite = 0
+        early_stop_per = 10
 
-            r_1 = np.zeros(shape=(self.stu_num, self.prob_num))
-            r_1[np.where(self.R == 1)[0], np.where(self.R == 1)[1]] = 1
-            r_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
-            r_1[np.where(self.R != self.skip_value)[0], np.where(self.R != self.skip_value)[1]] = 1
-            s_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
-            a, b, c = update_irt(a, b, c, self.D, self.prof, self.R, r_ek, s_ek, lr, epoch_m, epsilon)
-            change = max(np.max(np.abs(a - a_tmp)), np.max(np.abs(b - b_tmp)), np.max(np.abs(c - c_tmp)),
-                         np.max(np.abs(prior_dis_tmp - prior_dis_tmp)))
-            if iteration > 20 and change < epsilon:
-                break
+        if test_data is not None:
+            for iteration in range(epoch):
+                prof_prob_like, prof_stu_like = get_Likelihood(a, b, c, self.prof, self.R)
+                prior_dis, norm_dis_like = update_prior(prior_dis, prof_stu_like)
+
+                r_1 = np.zeros(shape=(self.stu_num, self.prob_num))
+                r_1[np.where(self.R == 1)[0], np.where(self.R == 1)[1]] = 1
+                r_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
+                r_1[np.where(self.R != self.skip_value)[0], np.where(self.R != self.skip_value)[1]] = 1
+                s_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
+                a, b, c = update_irt(a, b, c, self.D, self.prof, self.R, r_ek, s_ek, lr, epoch_m, epsilon)
+                # change = max(np.max(np.abs(a - a_tmp))/np.mean(np.abs(a)), np.max(np.abs(b - b_tmp))/np.mean(np.abs(b)), np.max(np.abs(c - c_tmp))/np.mean(np.abs(c)),
+                #              np.max(np.abs(prior_dis_tmp - prior_dis_tmp))/np.mean(np.abs(prior_dis_tmp)))
+                # if change < epsilon:
+                #     print(iteration)
+                #     break
+
+                if iteration % early_stop_per == 0:
+                    self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
+                    self.stu_prof = self.transform(self.R)
+
+                    correctness, users, auc = self.eval(test_data)
+                    acc = self.common.evaluate_overall_acc(correctness)
+
+                    if acc > best_acc:
+                        best_acc = acc
+                        best_ite = iteration
+                        best_metrics = [correctness, users, auc]
+
+        else :
+            for iteration in range(epoch):
+                prof_prob_like, prof_stu_like = get_Likelihood(a, b, c, self.prof, self.R)
+                prior_dis, norm_dis_like = update_prior(prior_dis, prof_stu_like)
+
+                r_1 = np.zeros(shape=(self.stu_num, self.prob_num))
+                r_1[np.where(self.R == 1)[0], np.where(self.R == 1)[1]] = 1
+                r_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
+                r_1[np.where(self.R != self.skip_value)[0], np.where(self.R != self.skip_value)[1]] = 1
+                s_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
+                a, b, c = update_irt(a, b, c, self.D, self.prof, self.R, r_ek, s_ek, lr, epoch_m, epsilon)
+                # change = max(np.max(np.abs(a - a_tmp))/np.mean(np.abs(a)), np.max(np.abs(b - b_tmp))/np.mean(np.abs(b)), np.max(np.abs(c - c_tmp))/np.mean(np.abs(c)),
+                #              np.max(np.abs(prior_dis_tmp - prior_dis_tmp))/np.mean(np.abs(prior_dis_tmp)))
+                # if change < epsilon:
+                #     print(iteration)
+                #     break
+
         self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
         self.stu_prof = self.transform(self.R)
 
+        if test_data is not None :
+            best_metrics.append(best_ite)
+            return best_metrics
+        else :
+            return None
+
     def eval(self, test_data) -> tuple:
+        metric = BinaryAUROC()
         pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
         correctness = []
         users = []
+        y_pred = []
+        y_true = []
 
         for i in tqdm(test_data, "evaluating"):
             stu, test_id, true_score = i['user_id'], i['item_id'], i['score']
-            correctness.append(np.abs(pred_score[stu, test_id] - true_score)<0.5)
+            pred = pred_score[stu, test_id]
+            correctness.append(np.abs(pred - true_score)<0.5)
+            metric.update(torch.tensor([pred]),torch.tensor([true_score]))
             users.append(stu)
+            y_pred.append(pred)
+            y_true.append(true_score)
         # test_rmse, test_mae, accuracy = [], [], []
         # for i in tqdm(test_data, "evaluating"):
         #     stu, test_id, true_score = i['user_id'], i['item_id'], i['score']
@@ -148,8 +200,8 @@ class IRT(CDM):
         #     accuracy.append(abs(pred_score[stu, test_id] - true_score)<=0.5)
 
         # accuracy = np.array(accuracy)
-
-        return  np.array(correctness),np.array(users)
+        rmse = np.sqrt(np.power(np.array(y_true) - np.array(y_pred), 2) / len(y_pred))
+        return  np.array(correctness),np.array(users),metric.compute().item(),rmse
 
     def save(self, filepath):
         with open(filepath, 'wb') as file:

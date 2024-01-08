@@ -5,6 +5,8 @@
 import logging
 import numpy as np
 import torch
+from torcheval.metrics import BinaryAUROC
+
 from EduCDM import CDM
 from torch import nn
 import torch.nn.functional as F
@@ -62,6 +64,7 @@ class MIRTNet(nn.Module):
         b = torch.squeeze(self.b(item), dim=-1)
         if torch.max(theta != theta) or torch.max(a != a) or torch.max(b != b):  # pragma: no cover
             raise ValueError('ValueError:theta,a,b may contains nan!  The a_range is too large.')
+            print("danger !")
         return self.irf(theta, a, b, **self.irf_kwargs)
 
     @classmethod
@@ -70,15 +73,19 @@ class MIRTNet(nn.Module):
 
 
 class MIRT(CDM):
-    def __init__(self, user_num, item_num, latent_dim, a_range=None):
+    def __init__(self, user_num, item_num, latent_dim, a_range=None, common=None):
         super(MIRT, self).__init__()
         self.irt_net = MIRTNet(user_num, item_num, latent_dim, a_range)
+        self.common = common
 
     def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
         self.irt_net = self.irt_net.to(device)
         loss_function = nn.BCELoss()
 
         trainer = torch.optim.Adam(self.irt_net.parameters(), lr)
+        best_acc = 0
+        best_ite=0
+        best_metrics = []
 
         for e in range(epoch):
             losses = []
@@ -98,11 +105,28 @@ class MIRT(CDM):
                 losses.append(loss.mean().item())
             #print("[Epoch %d] LogisticLoss: %.6f" % (e, float(np.mean(losses))))
 
-            if test_data is not None:
-                auc, accuracy = self.eval(test_data, device=device)
+            if test_data is not None and e %10 == 0:
+                correctness,users,auc = self.eval(test_data, device=device)
+                acc = self.common.evaluate_overall_acc(correctness)
                 #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
+                if acc> best_acc :
+                    best_acc = acc
+                    best_ite = e
+                    best_metrics = [correctness, users, auc]
+
+                if e-best_ite > 60 :
+                    continue
+
+        if test_data is not None :
+            best_metrics.append(best_ite)
+            return best_metrics
+        else :
+            return None
+
+
     def eval(self, test_data, device="cpu") -> tuple:
+        metric = BinaryAUROC()
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()
         y_pred = []
@@ -117,9 +141,11 @@ class MIRT(CDM):
             y_true.extend(response.tolist())
             users.extend(user_id.tolist())
 
+        metric.update(torch.tensor(y_pred), torch.tensor(y_true))
         self.irt_net.train()
         correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
-        return correctness, np.array((users))
+        rmse = np.sqrt(np.power(np.array(y_true)-np.array(y_pred),2)/len(y_pred))
+        return correctness, np.array((users)),metric.compute().item(),rmse
 
     def save(self, filepath):
         torch.save(self.irt_net.state_dict(), filepath)
