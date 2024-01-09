@@ -106,17 +106,17 @@ class MIRT(CDM):
             #print("[Epoch %d] LogisticLoss: %.6f" % (e, float(np.mean(losses))))
 
             if test_data is not None and e %10 == 0:
-                correctness,users,auc = self.eval(test_data, device=device)
+                correctness,users,auc,rmse = self.eval(test_data, device=device)
                 acc = self.common.evaluate_overall_acc(correctness)
                 #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
                 if acc> best_acc :
                     best_acc = acc
                     best_ite = e
-                    best_metrics = [correctness, users, auc]
+                    best_metrics = [correctness, users, auc,rmse]
 
                 if e-best_ite > 60 :
-                    continue
+                    break
 
         if test_data is not None :
             best_metrics.append(best_ite)
@@ -144,7 +144,7 @@ class MIRT(CDM):
         metric.update(torch.tensor(y_pred), torch.tensor(y_true))
         self.irt_net.train()
         correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
-        rmse = np.sqrt(np.power(np.array(y_true)-np.array(y_pred),2)/len(y_pred))
+        rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
         return correctness, np.array((users)),metric.compute().item(),rmse
 
     def save(self, filepath):

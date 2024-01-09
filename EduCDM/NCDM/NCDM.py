@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
+from torcheval.metrics import metric, BinaryAUROC
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score
 from EduCDM import CDM
@@ -63,19 +64,26 @@ class Net(nn.Module):
 class NCDM(CDM):
     '''Neural Cognitive Diagnosis Model'''
 
-    def __init__(self, knowledge_n, exer_n, student_n):
+    def __init__(self, knowledge_n, exer_n, student_n, common=None):
         super(NCDM, self).__init__()
         self.ncdm_net = Net(knowledge_n, exer_n, student_n)
+        self.common = common
 
     def train(self, train_data, test_data=None, epoch=10, device="cpu", lr=0.002, silence=False):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.train()
+
         loss_function = nn.BCELoss()
         optimizer = optim.Adam(self.ncdm_net.parameters(), lr=lr)
-        for epoch_i in range(epoch):
+        
+        best_acc = 0
+        best_ite=0
+        best_metrics = []
+        
+        for e in range(epoch):
             epoch_losses = []
             batch_count = 0
-            for batch_data in tqdm(train_data, "Epoch %s" % epoch_i):
+            for batch_data in tqdm(train_data, "Epoch %s" % e):
                 batch_count += 1
                 user_id, item_id, knowledge_emb, y = batch_data
                 user_id: torch.Tensor = user_id.to(device)
@@ -91,16 +99,32 @@ class NCDM(CDM):
 
                 epoch_losses.append(loss.mean().item())
 
-            print("[Epoch %d] average loss: %.6f" % (epoch_i, float(np.mean(epoch_losses))))
+            if test_data is not None and e % 1 == 0:
+                correctness, users, auc, rmse = self.eval(test_data, device=device)
+                acc = self.common.evaluate_overall_acc(correctness)
 
-            if test_data is not None:
-                auc, accuracy = self.eval(test_data, device=device)
-                print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
+
+                if acc > best_acc:
+                    best_acc = acc
+                    best_ite = e
+                    best_metrics = [correctness, users, auc, rmse]
+
+                print("[Epoch %d] auc: %.6f, accuracy: %.6f, best_ite: %.6f" % (e, auc, acc,best_ite))
+
+                if e - best_ite > 20:
+                    break
+
+        if test_data is not None :
+            best_metrics.append(best_ite)
+            return best_metrics
+        else :
+            return None
 
     def eval(self, test_data, device="cpu"):
+        metric = BinaryAUROC()
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
-        y_true, y_pred = [], []
+        y_true, y_pred, users = [], [], []
         for batch_data in tqdm(test_data, "Evaluating"):
             user_id, item_id, knowledge_emb, y = batch_data
             user_id: torch.Tensor = user_id.to(device)
@@ -109,8 +133,13 @@ class NCDM(CDM):
             pred: torch.Tensor = self.ncdm_net(user_id, item_id, knowledge_emb)
             y_pred.extend(pred.detach().cpu().tolist())
             y_true.extend(y.tolist())
+            users.extend(user_id.tolist())
 
-        return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
+        metric.update(torch.tensor(y_pred), torch.tensor(y_true))
+        self.ncdm_net.train()
+        correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
+        rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
+        return correctness, np.array((users)), metric.compute().item(), rmse
 
     def save(self, filepath):
         torch.save(self.ncdm_net.state_dict(), filepath)

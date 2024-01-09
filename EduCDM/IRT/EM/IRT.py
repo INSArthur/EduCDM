@@ -142,13 +142,16 @@ class IRT(CDM):
                     self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
                     self.stu_prof = self.transform(self.R)
 
-                    correctness, users, auc = self.eval(test_data)
+                    correctness, users, auc, rmse = self.eval(test_data)
                     acc = self.common.evaluate_overall_acc(correctness)
 
                     if acc > best_acc:
                         best_acc = acc
                         best_ite = iteration
-                        best_metrics = [correctness, users, auc]
+                        best_metrics = [correctness, users, auc, rmse]
+
+                    if (iteration - best_ite) > 60:
+                        break
 
         else :
             for iteration in range(epoch):
@@ -200,7 +203,7 @@ class IRT(CDM):
         #     accuracy.append(abs(pred_score[stu, test_id] - true_score)<=0.5)
 
         # accuracy = np.array(accuracy)
-        rmse = np.sqrt(np.power(np.array(y_true) - np.array(y_pred), 2) / len(y_pred))
+        rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
         return  np.array(correctness),np.array(users),metric.compute().item(),rmse
 
     def save(self, filepath):

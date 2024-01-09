@@ -4,6 +4,7 @@
 import logging
 import numpy as np
 import torch
+from torcheval.metrics import BinaryAUROC
 from tqdm import tqdm
 from torch import nn
 from EduCDM import CDM
@@ -31,15 +32,21 @@ class MFNet(nn.Module):
 class MCD(CDM):
     """Matrix factorization based Cognitive Diagnosis Model"""
 
-    def __init__(self, user_num, item_num, latent_dim):
+    def __init__(self, user_num, item_num, latent_dim, common=None):
         super(MCD, self).__init__()
         self.mf_net = MFNet(user_num, item_num, latent_dim)
+
+        self.common = common
 
     def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
         self.mf_net = self.mf_net.to(device)
         loss_function = nn.BCELoss()
 
         trainer = torch.optim.Adam(self.mf_net.parameters(), lr)
+
+        best_acc = 0
+        best_ite=0
+        best_metrics = []
 
         for e in range(epoch):
             losses = []
@@ -59,15 +66,32 @@ class MCD(CDM):
                 losses.append(loss.mean().item())
             print("[Epoch %d] LogisticLoss: %.6f" % (e, float(np.mean(losses))))
 
-            if test_data is not None:
-                auc, accuracy = self.eval(test_data, device=device)
-                print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
+            if test_data is not None and e %10 == 0:
+                correctness,users,auc,rmse = self.eval(test_data, device=device)
+                acc = self.common.evaluate_overall_acc(correctness)
+                #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
+
+                if acc> best_acc :
+                    best_acc = acc
+                    best_ite = e
+                    best_metrics = [correctness, users, auc,rmse]
+
+                if e-best_ite > 60 :
+                    break
+
+        if test_data is not None :
+            best_metrics.append(best_ite)
+            return best_metrics
+        else :
+            return None
 
     def eval(self, test_data, device="cpu") -> tuple:
+        metric = BinaryAUROC()
         self.mf_net = self.mf_net.to(device)
         self.mf_net.eval()
         y_pred = []
         y_true = []
+        users = []
         for batch_data in tqdm(test_data, "evaluating"):
             user_id, item_id, response = batch_data
             user_id: torch.Tensor = user_id.to(device)
@@ -75,9 +99,13 @@ class MCD(CDM):
             pred: torch.Tensor = self.mf_net(user_id, item_id)
             y_pred.extend(pred.tolist())
             y_true.extend(response.tolist())
+            users.extend(user_id.tolist())
 
         self.mf_net.train()
-        return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
+        metric.update(torch.tensor(y_pred), torch.tensor(y_true))
+        correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
+        rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
+        return correctness, np.array((users)), metric.compute().item(), rmse
 
     def save(self, filepath):
         torch.save(self.mf_net.state_dict(), filepath)

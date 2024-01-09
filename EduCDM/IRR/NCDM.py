@@ -12,9 +12,10 @@ from longling.ML.metrics import ranking_report
 
 
 class NCDM(PointNCDM):
-    def __init__(self, user_num, item_num, knowledge_num, zeta=0.5):
+    def __init__(self, user_num, item_num, knowledge_num, zeta=0.5, common=None):
         super(NCDM, self).__init__(knowledge_num, item_num, user_num)
         self.zeta = zeta
+        self.common = common
 
     def train(self, train_data, test_data=None, epoch=10, device="cpu", lr=0.002, silence=False) -> ...:
         self.ncdm_net = self.ncdm_net.to(device)
@@ -23,6 +24,10 @@ class NCDM(PointNCDM):
         loss_function = HarmonicLoss(self.zeta)
 
         trainer = torch.optim.Adam(self.ncdm_net.parameters(), lr, weight_decay=1e-4)
+
+        best_acc = 0
+        best_ite = 0
+        best_metrics = []
 
         for e in range(epoch):
             point_losses = []
