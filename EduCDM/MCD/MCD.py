@@ -38,7 +38,7 @@ class MCD(CDM):
 
         self.common = common
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
+    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001,eval_freq=5,quit_delta=30) -> ...:
         self.mf_net = self.mf_net.to(device)
         loss_function = nn.BCELoss()
 
@@ -51,7 +51,7 @@ class MCD(CDM):
         for e in range(epoch):
             losses = []
             for batch_data in tqdm(train_data, "Epoch %s" % e):
-                user_id, item_id, response = batch_data
+                user_id, item_id, response,_ = batch_data
                 user_id: torch.Tensor = user_id.to(device)
                 item_id: torch.Tensor = item_id.to(device)
                 predicted_response: torch.Tensor = self.mf_net(user_id, item_id)
@@ -66,7 +66,7 @@ class MCD(CDM):
                 losses.append(loss.mean().item())
             print("[Epoch %d] LogisticLoss: %.6f" % (e, float(np.mean(losses))))
 
-            if test_data is not None and e %10 == 0:
+            if test_data is not None and e %eval_freq == 0:
                 correctness,users,auc,rmse = self.eval(test_data, device=device)
                 acc = self.common.evaluate_overall_acc(correctness)
                 #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
@@ -76,13 +76,15 @@ class MCD(CDM):
                     best_ite = e
                     best_metrics = [correctness, users, auc,rmse]
 
-                if e-best_ite > 60 :
+                if e-best_ite > quit_delta :
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
+            embedding_matrix = self.mf_net.user_embedding.weight.data.numpy()
+            np.savetxt('embedding_mcd.csv', embedding_matrix, delimiter=',')
             return None
 
     def eval(self, test_data, device="cpu") -> tuple:

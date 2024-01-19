@@ -88,7 +88,7 @@ class DINA(CDM):
 
         self.common = common
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
+    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001,eval_freq=5,quit_delta=30) -> ...:
         self.dina_net = self.dina_net.to(device)
         loss_function = nn.BCELoss()
 
@@ -101,7 +101,7 @@ class DINA(CDM):
         for e in range(epoch):
             losses = []
             for batch_data in tqdm(train_data, "Epoch %s" % e):
-                user_id, item_id, knowledge, response = batch_data
+                user_id, item_id, response, knowledge, _ = batch_data
                 user_id: torch.Tensor = user_id.to(device)
                 item_id: torch.Tensor = item_id.to(device)
                 knowledge: torch.Tensor = knowledge.to(device)
@@ -117,7 +117,7 @@ class DINA(CDM):
                 losses.append(loss.mean().item())
             print("[Epoch %d] LogisticLoss: %.6f" % (e, float(np.mean(losses))))
 
-            if test_data is not None and e %10 == 0:
+            if test_data is not None and e %eval_freq == 0:
                 correctness,users,auc,rmse = self.eval(test_data, device=device)
                 acc = self.common.evaluate_overall_acc(correctness)
                 #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
@@ -127,13 +127,15 @@ class DINA(CDM):
                     best_ite = e
                     best_metrics = [correctness, users, auc,rmse]
 
-                if e-best_ite > 60 :
+                if e-best_ite > quit_delta :
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
+            embedding_matrix = self.dina_net.theta.weight.data.numpy()
+            np.savetxt('embedding_dina.csv', embedding_matrix, delimiter=',')
             return None
 
     def eval(self, test_data, device="cpu") -> tuple:
@@ -144,7 +146,7 @@ class DINA(CDM):
         y_true = []
         users = []
         for batch_data in tqdm(test_data, "evaluating"):
-            user_id, item_id, knowledge, response = batch_data
+            user_id, item_id, response, knowledge, _ = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             knowledge: torch.Tensor = knowledge.to(device)

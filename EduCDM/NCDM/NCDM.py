@@ -69,7 +69,7 @@ class NCDM(CDM):
         self.ncdm_net = Net(knowledge_n, exer_n, student_n)
         self.common = common
 
-    def train(self, train_data, test_data=None, epoch=10, device="cpu", lr=0.002, silence=False):
+    def train(self, train_data, test_data=None, epoch=10, device="cpu", lr=0.002, silence=False,eval_freq=5,quit_delta=30):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.train()
 
@@ -85,7 +85,7 @@ class NCDM(CDM):
             batch_count = 0
             for batch_data in tqdm(train_data, "Epoch %s" % e):
                 batch_count += 1
-                user_id, item_id, knowledge_emb, y = batch_data
+                user_id, item_id, y, knowledge_emb, _ = batch_data
                 user_id: torch.Tensor = user_id.to(device)
                 item_id: torch.Tensor = item_id.to(device)
                 knowledge_emb: torch.Tensor = knowledge_emb.to(device)
@@ -99,7 +99,7 @@ class NCDM(CDM):
 
                 epoch_losses.append(loss.mean().item())
 
-            if test_data is not None and e % 1 == 0:
+            if test_data is not None and e % eval_freq == 0:
                 correctness, users, auc, rmse = self.eval(test_data, device=device)
                 acc = self.common.evaluate_overall_acc(correctness)
 
@@ -111,13 +111,15 @@ class NCDM(CDM):
 
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f, best_ite: %.6f" % (e, auc, acc,best_ite))
 
-                if e - best_ite > 20:
+                if e - best_ite > quit_delta:
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
+            embedding_matrix = self.ncdm_net.student_emb.weight.data.numpy()
+            np.savetxt('embedding_ncdm.csv', embedding_matrix, delimiter=',')
             return None
 
     def eval(self, test_data, device="cpu"):
@@ -126,7 +128,7 @@ class NCDM(CDM):
         self.ncdm_net.eval()
         y_true, y_pred, users = [], [], []
         for batch_data in tqdm(test_data, "Evaluating"):
-            user_id, item_id, knowledge_emb, y = batch_data
+            user_id, item_id, y, knowledge_emb, _ = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             knowledge_emb: torch.Tensor = knowledge_emb.to(device)

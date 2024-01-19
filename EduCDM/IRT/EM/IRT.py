@@ -11,7 +11,7 @@ from EduCDM import CDM
 from torcheval.metrics import BinaryAUROC
 import torch
 import matplotlib.pyplot as plt
-
+import math
 
 def init_parameters(prob_num, dim): # Initialisation des paramètres du 3 PL
     alpha = stats.norm.rvs(loc=0.75, scale=0.01, size=(prob_num, dim)) # generate random number of a gaussian distribution of mean "loc", and std deviation "scale"
@@ -53,7 +53,11 @@ def get_Likelihood(a, b, c, prof, R):
 
 def update_prior(prior_dis, prof_stu_like):
     dis_like = prof_stu_like * np.expand_dims(prior_dis, axis=1)
-    norm_dis_like = dis_like / np.sum(dis_like, axis=0)
+    s = np.sum(dis_like, axis=0)
+    s[s == 0] = math.inf
+    if (s==0).any() :
+        print("stop")
+    norm_dis_like = dis_like / s
     update_prior_dis = np.sum(norm_dis_like, axis=1) / np.sum(norm_dis_like)
     return update_prior_dis, norm_dis_like
 
@@ -113,13 +117,13 @@ class IRT(CDM):
         pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
         loss = np.average(np.abs(pred_score[np.array(data['user_id']-1), np.array(data['item_id']-1)] - np.array(data['score'])))
         return loss, pred_score
-    def train(self, lr, epoch, epoch_m=10, epsilon=1e-3, test_data=None):
+    def train(self, lr, epoch, epoch_m=10, epsilon=1e-3, test_data=None,eval_freq=5,quit_delta=30):
         a, b, c = np.copy(self.a), np.copy(self.b), np.copy(self.c)
         prior_dis = np.copy(self.prior_dis)
         best_metrics = []
         best_acc = 0
         best_ite = 0
-        early_stop_per = 10
+        early_stop_per = 5
 
         if test_data is not None:
             for iteration in range(epoch):
@@ -138,19 +142,20 @@ class IRT(CDM):
                 #     print(iteration)
                 #     break
 
-                if iteration % early_stop_per == 0:
+                if iteration % eval_freq == 0:
                     self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
                     self.stu_prof = self.transform(self.R)
 
                     correctness, users, auc, rmse = self.eval(test_data)
                     acc = self.common.evaluate_overall_acc(correctness)
+                    print("epoch "+str(iteration)+"; acc "+str(acc))
 
                     if acc > best_acc:
                         best_acc = acc
                         best_ite = iteration
                         best_metrics = [correctness, users, auc, rmse]
 
-                    if (iteration - best_ite) > 60:
+                    if (iteration - best_ite) > quit_delta :
                         break
 
         else :
@@ -177,6 +182,8 @@ class IRT(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
+            embedding_matrix = self.stu_prof
+            np.savetxt('embedding_irt.csv', embedding_matrix, delimiter=',')
             return None
 
     def eval(self, test_data) -> tuple:
