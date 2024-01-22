@@ -134,7 +134,7 @@ class DINA(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.dina_net.theta.weight.data.numpy()
+            return self.dina_net.theta.weight.data.numpy(), self.dina_net.guess.weight.data.numpy()
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()

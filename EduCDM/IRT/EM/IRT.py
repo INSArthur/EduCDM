@@ -162,7 +162,7 @@ class IRT(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.stu_prof
+            return self.stu_prof,self.b
 
     def eval(self, test_data) -> tuple:
         metric = BinaryAUROC()

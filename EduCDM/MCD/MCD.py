@@ -83,7 +83,7 @@ class MCD(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.mf_net.user_embedding.weight.data.numpy()
+            return self.mf_net.user_embedding.weight.data.numpy(), self.mf_net.item_embedding.weight.data.numpy()
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()

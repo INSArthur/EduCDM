@@ -118,7 +118,7 @@ class NCDM(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.ncdm_net.student_emb.weight.data.numpy()
+            return self.ncdm_net.student_emb.weight.data.numpy(),self.ncdm_net.e_difficulty.weight.data.numpy()
 
     def eval(self, test_data, device="cpu"):
         metric = BinaryAUROC()

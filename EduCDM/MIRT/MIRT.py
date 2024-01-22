@@ -131,7 +131,7 @@ class MIRT(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.irt_net.theta.weight.data.numpy()
+            return self.irt_net.theta.weight.data.numpy(), self.irt_net.b.weight.data.numpy()
 
 
     def eval(self, test_data, device="cpu") -> tuple:
