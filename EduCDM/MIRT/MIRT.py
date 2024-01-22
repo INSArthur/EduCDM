@@ -1,6 +1,6 @@
 # coding: utf-8
 # 2021/7/1 @ tongshiwei
-
+import math
 
 import logging
 import numpy as np
@@ -62,6 +62,15 @@ class MIRTNet(nn.Module):
         else:
             a = F.softplus(a)
         b = torch.squeeze(self.b(item), dim=-1)
+
+        a[torch.isnan(a)] = math.inf
+        b[torch.isnan(b)] = math.inf
+        theta[torch.isnan(theta)] = math.inf
+
+        a[a==0] = math.inf
+        b[b == 0] = math.inf
+        theta[theta == 0] = math.inf
+
         if torch.max(theta != theta) or torch.max(a != a) or torch.max(b != b):  # pragma: no cover
             raise ValueError('ValueError:theta,a,b may contains nan!  The a_range is too large.')
             print("danger !")
@@ -90,7 +99,7 @@ class MIRT(CDM):
         for e in range(epoch):
             losses = []
             for batch_data in tqdm(train_data, "Epoch %s" % e):
-                user_id, item_id, response,_ = batch_data
+                user_id, item_id, response,_,_ = batch_data
                 user_id: torch.Tensor = user_id.to(device)
                 item_id: torch.Tensor = item_id.to(device)
                 predicted_response: torch.Tensor = self.irt_net(user_id, item_id)
@@ -115,16 +124,14 @@ class MIRT(CDM):
                     best_ite = e
                     best_metrics = [correctness, users, auc,rmse]
 
-                if e-best_ite > quit_delta :
+                if e-best_ite >= quit_delta :
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            embedding_matrix = self.irt_net.theta.weight.data.numpy()
-            np.savetxt('embedding_mirt.csv', embedding_matrix, delimiter=',')
-            return None
+            return self.irt_net.theta.weight.data.numpy()
 
 
     def eval(self, test_data, device="cpu") -> tuple:
@@ -135,7 +142,7 @@ class MIRT(CDM):
         y_true = []
         users = []
         for batch_data in tqdm(test_data, "evaluating"):
-            user_id, item_id, response = batch_data
+            user_id, item_id, response,_,_ = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             pred: torch.Tensor = self.irt_net(user_id, item_id)

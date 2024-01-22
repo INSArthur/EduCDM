@@ -51,7 +51,7 @@ class MCD(CDM):
         for e in range(epoch):
             losses = []
             for batch_data in tqdm(train_data, "Epoch %s" % e):
-                user_id, item_id, response,_ = batch_data
+                user_id, item_id, response,_,_ = batch_data
                 user_id: torch.Tensor = user_id.to(device)
                 item_id: torch.Tensor = item_id.to(device)
                 predicted_response: torch.Tensor = self.mf_net(user_id, item_id)
@@ -76,16 +76,14 @@ class MCD(CDM):
                     best_ite = e
                     best_metrics = [correctness, users, auc,rmse]
 
-                if e-best_ite > quit_delta :
+                if e-best_ite >= quit_delta :
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            embedding_matrix = self.mf_net.user_embedding.weight.data.numpy()
-            np.savetxt('embedding_mcd.csv', embedding_matrix, delimiter=',')
-            return None
+            return self.mf_net.user_embedding.weight.data.numpy()
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()
@@ -95,7 +93,7 @@ class MCD(CDM):
         y_true = []
         users = []
         for batch_data in tqdm(test_data, "evaluating"):
-            user_id, item_id, response = batch_data
+            user_id, item_id, response,_,_ = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             pred: torch.Tensor = self.mf_net(user_id, item_id)

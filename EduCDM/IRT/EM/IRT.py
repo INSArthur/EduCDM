@@ -99,9 +99,9 @@ class IRT(CDM):
         skip value in response matrix
     ----------
     """
-    def __init__(self, R, stu_num, prob_num, dim=1, skip_value=-1,common=None):
+    def __init__(self, stu_num, prob_num, dim=1, skip_value=-1,common=None):
         super(IRT, self).__init__()
-        self.R, self.skip_value = R, skip_value # : matrice Student_id x item_id -> score de la réponse
+        self.skip_value = skip_value # : matrice Student_id x item_id -> score de la réponse
         self.stu_num, self.prob_num, self.dim = stu_num, prob_num, dim
         self.a, self.b, self.c = init_parameters(prob_num, dim)  # IRT parameters (only one sigmoid ?)
         self.D = 1.702
@@ -109,71 +109,51 @@ class IRT(CDM):
         self.stu_prof = np.zeros(shape=(stu_num, dim))
         self.common = common
 
-    def update(self,studentId,itemId, score,lr,epoch):
-        self.R[studentId,itemId] = score
-        self.train(lr,epoch)
-
     def cal_loss(self,data):
         pred_score = irt3pl(np.sum(self.a * (np.expand_dims(self.stu_prof, axis=1) - self.b), axis=-1), 1, 0, self.c)
         loss = np.average(np.abs(pred_score[np.array(data['user_id']-1), np.array(data['item_id']-1)] - np.array(data['score'])))
         return loss, pred_score
-    def train(self, lr, epoch, epoch_m=10, epsilon=1e-3, test_data=None,eval_freq=5,quit_delta=30):
+
+    def train(self,train_data, lr, epoch, epoch_m=10, epsilon=1e-3, test_data=None,eval_freq=5,quit_delta=30):
+        self.R = train_data
         a, b, c = np.copy(self.a), np.copy(self.b), np.copy(self.c)
         prior_dis = np.copy(self.prior_dis)
         best_metrics = []
         best_acc = 0
         best_ite = 0
-        early_stop_per = 5
 
-        if test_data is not None:
-            for iteration in range(epoch):
-                prof_prob_like, prof_stu_like = get_Likelihood(a, b, c, self.prof, self.R)
-                prior_dis, norm_dis_like = update_prior(prior_dis, prof_stu_like)
+        for iteration in range(epoch):
+            prof_prob_like, prof_stu_like = get_Likelihood(a, b, c, self.prof, self.R)
+            prior_dis, norm_dis_like = update_prior(prior_dis, prof_stu_like)
 
-                r_1 = np.zeros(shape=(self.stu_num, self.prob_num))
-                r_1[np.where(self.R == 1)[0], np.where(self.R == 1)[1]] = 1
-                r_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
-                r_1[np.where(self.R != self.skip_value)[0], np.where(self.R != self.skip_value)[1]] = 1
-                s_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
-                a, b, c = update_irt(a, b, c, self.D, self.prof, self.R, r_ek, s_ek, lr, epoch_m, epsilon)
-                # change = max(np.max(np.abs(a - a_tmp))/np.mean(np.abs(a)), np.max(np.abs(b - b_tmp))/np.mean(np.abs(b)), np.max(np.abs(c - c_tmp))/np.mean(np.abs(c)),
-                #              np.max(np.abs(prior_dis_tmp - prior_dis_tmp))/np.mean(np.abs(prior_dis_tmp)))
-                # if change < epsilon:
-                #     print(iteration)
-                #     break
+            r_1 = np.zeros(shape=(self.stu_num, self.prob_num))
+            r_1[np.where(self.R == 1)[0], np.where(self.R == 1)[1]] = 1
+            r_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
+            r_1[np.where(self.R != self.skip_value)[0], np.where(self.R != self.skip_value)[1]] = 1
+            s_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
+            a, b, c = update_irt(a, b, c, self.D, self.prof, self.R, r_ek, s_ek, lr, epoch_m, epsilon)
+            # change = max(np.max(np.abs(a - a_tmp))/np.mean(np.abs(a)), np.max(np.abs(b - b_tmp))/np.mean(np.abs(b)), np.max(np.abs(c - c_tmp))/np.mean(np.abs(c)),
+            #              np.max(np.abs(prior_dis_tmp - prior_dis_tmp))/np.mean(np.abs(prior_dis_tmp)))
+            # if change < epsilon:
+            #     print(iteration)
+            #     break
 
-                if iteration % eval_freq == 0:
-                    self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
-                    self.stu_prof = self.transform(self.R)
+            if test_data is not None and iteration % eval_freq == 0:
+                self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
+                self.stu_prof = self.transform(self.R)
 
-                    correctness, users, auc, rmse = self.eval(test_data)
-                    acc = self.common.evaluate_overall_acc(correctness)
-                    print("epoch "+str(iteration)+"; acc "+str(acc))
+                correctness, users, auc, rmse = self.eval(test_data)
+                acc = self.common.evaluate_overall_acc(correctness)
+                print("epoch "+str(iteration)+"; acc "+str(acc))
 
-                    if acc > best_acc:
-                        best_acc = acc
-                        best_ite = iteration
-                        best_metrics = [correctness, users, auc, rmse]
+                if acc > best_acc:
+                    best_acc = acc
+                    best_ite = iteration
+                    best_metrics = [correctness, users, auc, rmse]
 
-                    if (iteration - best_ite) > quit_delta :
-                        break
+                if (iteration - best_ite) >= quit_delta :
+                    break
 
-        else :
-            for iteration in range(epoch):
-                prof_prob_like, prof_stu_like = get_Likelihood(a, b, c, self.prof, self.R)
-                prior_dis, norm_dis_like = update_prior(prior_dis, prof_stu_like)
-
-                r_1 = np.zeros(shape=(self.stu_num, self.prob_num))
-                r_1[np.where(self.R == 1)[0], np.where(self.R == 1)[1]] = 1
-                r_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
-                r_1[np.where(self.R != self.skip_value)[0], np.where(self.R != self.skip_value)[1]] = 1
-                s_ek = np.dot(norm_dis_like, r_1)  # shape = (100, prob_num)
-                a, b, c = update_irt(a, b, c, self.D, self.prof, self.R, r_ek, s_ek, lr, epoch_m, epsilon)
-                # change = max(np.max(np.abs(a - a_tmp))/np.mean(np.abs(a)), np.max(np.abs(b - b_tmp))/np.mean(np.abs(b)), np.max(np.abs(c - c_tmp))/np.mean(np.abs(c)),
-                #              np.max(np.abs(prior_dis_tmp - prior_dis_tmp))/np.mean(np.abs(prior_dis_tmp)))
-                # if change < epsilon:
-                #     print(iteration)
-                #     break
 
         self.a, self.b, self.c, self.prior_dis = a, b, c, prior_dis
         self.stu_prof = self.transform(self.R)
@@ -182,9 +162,7 @@ class IRT(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            embedding_matrix = self.stu_prof
-            np.savetxt('embedding_irt.csv', embedding_matrix, delimiter=',')
-            return None
+            return self.stu_prof
 
     def eval(self, test_data) -> tuple:
         metric = BinaryAUROC()

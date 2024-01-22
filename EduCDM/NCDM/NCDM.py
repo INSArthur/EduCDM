@@ -111,16 +111,14 @@ class NCDM(CDM):
 
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f, best_ite: %.6f" % (e, auc, acc,best_ite))
 
-                if e - best_ite > quit_delta:
+                if e - best_ite >= quit_delta:
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            embedding_matrix = self.ncdm_net.student_emb.weight.data.numpy()
-            np.savetxt('embedding_ncdm.csv', embedding_matrix, delimiter=',')
-            return None
+            return self.ncdm_net.student_emb.weight.data.numpy()
 
     def eval(self, test_data, device="cpu"):
         metric = BinaryAUROC()

@@ -127,16 +127,14 @@ class DINA(CDM):
                     best_ite = e
                     best_metrics = [correctness, users, auc,rmse]
 
-                if e-best_ite > quit_delta :
+                if e-best_ite >= quit_delta :
                     break
 
         if test_data is not None :
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            embedding_matrix = self.dina_net.theta.weight.data.numpy()
-            np.savetxt('embedding_dina.csv', embedding_matrix, delimiter=',')
-            return None
+            return self.dina_net.theta.weight.data.numpy()
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()
