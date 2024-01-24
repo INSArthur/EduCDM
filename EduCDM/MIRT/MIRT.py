@@ -74,7 +74,10 @@ class MIRTNet(nn.Module):
         if torch.max(theta != theta) or torch.max(a != a) or torch.max(b != b):  # pragma: no cover
             raise ValueError('ValueError:theta,a,b may contains nan!  The a_range is too large.')
             print("danger !")
-        return self.irf(theta, a, b, **self.irf_kwargs)
+
+        r = self.irf(theta, a, b, **self.irf_kwargs)
+        r[r.isnan()] = math.inf
+        return r
 
     @classmethod
     def irf(cls, theta, a, b, **kwargs):
@@ -104,7 +107,13 @@ class MIRT(CDM):
                 item_id: torch.Tensor = item_id.to(device)
                 predicted_response: torch.Tensor = self.irt_net(user_id, item_id)
                 response: torch.Tensor = response.to(device)
-                loss = loss_function(predicted_response, response)
+                try :
+                    loss = loss_function(predicted_response, response)
+                except RuntimeError :
+                    print(RuntimeError)
+                    print(predicted_response)
+                    print("response")
+                    print(response)
 
                 # back propagation
                 trainer.zero_grad()
