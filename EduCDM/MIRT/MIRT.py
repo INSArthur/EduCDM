@@ -109,8 +109,8 @@ class MIRT(CDM):
                 response: torch.Tensor = response.to(device)
                 try :
                     loss = loss_function(predicted_response, response)
-                except RuntimeError :
-                    print(RuntimeError)
+                except RuntimeError as e:
+                    print(e)
                     print(predicted_response)
                     print("response")
                     print(response)
