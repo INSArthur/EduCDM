@@ -54,7 +54,7 @@ def get_Likelihood(a, b, c, prof, R):
 def update_prior(prior_dis, prof_stu_like):
     dis_like = prof_stu_like * np.expand_dims(prior_dis, axis=1)
     s = np.sum(dis_like, axis=0)
-    s[s == 0] = math.inf
+    s[s == 0] = np.finfo(np.float64).tiny
     if (s==0).any() :
         print("stop")
     norm_dis_like = dis_like / s
