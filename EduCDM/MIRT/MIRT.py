@@ -63,20 +63,20 @@ class MIRTNet(nn.Module):
             a = F.softplus(a)
         b = torch.squeeze(self.b(item), dim=-1)
 
-        a[torch.isnan(a)] = math.inf
-        b[torch.isnan(b)] = math.inf
-        theta[torch.isnan(theta)] = math.inf
+        a[torch.isnan(a)] = np.finfo(np.float64).tiny
+        b[torch.isnan(b)] = np.finfo(np.float64).tiny
+        theta[torch.isnan(theta)] = np.finfo(np.float64).tiny
 
-        a[a==0] = math.inf
-        b[b == 0] = math.inf
-        theta[theta == 0] = math.inf
+        a[a==0] = np.finfo(np.float64).tiny
+        b[b == 0] = np.finfo(np.float64).tiny
+        theta[theta == 0] = np.finfo(np.float64).tiny
 
         if torch.max(theta != theta) or torch.max(a != a) or torch.max(b != b):  # pragma: no cover
             raise ValueError('ValueError:theta,a,b may contains nan!  The a_range is too large.')
             print("danger !")
 
         r = self.irf(theta, a, b, **self.irf_kwargs)
-        r[r.isnan()] = math.inf
+        r[r.isnan()] = np.finfo(np.float64).tiny
         return r
 
     @classmethod
