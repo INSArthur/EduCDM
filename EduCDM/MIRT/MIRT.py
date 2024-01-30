@@ -13,7 +13,11 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score
 
-
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
 def irt2pl(theta, a, b, *, F=np):
     """
 

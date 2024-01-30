@@ -11,6 +11,11 @@ from tqdm import tqdm
 from ..irt import irt3pl
 from sklearn.metrics import roc_auc_score, accuracy_score
 
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
 
 class IRTNet(nn.Module):
     def __init__(self, user_num, item_num, value_range, a_range, irf_kwargs=None):

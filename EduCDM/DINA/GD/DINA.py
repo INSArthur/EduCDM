@@ -13,6 +13,11 @@ from sklearn.metrics import roc_auc_score, accuracy_score
 import torch.autograd as autograd
 import torch.nn.functional as F
 
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
 
 class DINANet(nn.Module):
     def __init__(self, user_num, item_num, hidden_dim, max_slip=0.4, max_guess=0.4, *args, **kwargs):

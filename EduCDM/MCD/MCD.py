@@ -10,6 +10,11 @@ from torch import nn
 from EduCDM import CDM
 from sklearn.metrics import roc_auc_score, accuracy_score
 
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
 
 class MFNet(nn.Module):
     """Matrix Factorization Network"""
