@@ -37,9 +37,9 @@ class Net(nn.Module):
         super(Net, self).__init__()
 
         # prediction sub-net
-        self.student_emb = nn.Embedding(self.emb_num, self.stu_dim)
-        self.k_difficulty = nn.Embedding(self.exer_n, self.knowledge_dim)
-        self.e_difficulty = nn.Embedding(self.exer_n, 1)
+        self.student_emb = nn.Embedding(self.emb_num, self.stu_dim).to(device)
+        self.k_difficulty = nn.Embedding(self.exer_n, self.knowledge_dim).to(device)
+        self.e_difficulty = nn.Embedding(self.exer_n, 1).to(device)
         self.prednet_full1 = PosLinear(self.prednet_input_len, self.prednet_len1)
         self.drop_1 = nn.Dropout(p=0.5)
         self.prednet_full2 = PosLinear(self.prednet_len1, self.prednet_len2)
