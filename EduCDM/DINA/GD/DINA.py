@@ -164,8 +164,8 @@ class DINA(CDM):
 
         self.dina_net.train()
         metric.update(torch.tensor(y_pred), torch.tensor(y_true))
-        y_pred_rounded = torch.round(torch.tensor(y_pred))
-        y_true_rounded = torch.round(torch.tensor(y_true))
+        y_pred_rounded = torch.round(torch.tensor(y_pred)).int()
+        y_true_rounded = torch.round(torch.tensor(y_true)).int()
         precision.update(y_pred_rounded, y_true_rounded)
         recall.update(y_pred_rounded, y_true_rounded)
         f1.update(y_pred_rounded,y_true_rounded)
