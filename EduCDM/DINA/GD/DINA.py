@@ -4,7 +4,7 @@
 import logging
 import numpy as np
 import torch
-from torcheval.metrics import BinaryAUROC
+from torcheval.metrics import BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score
 
 from EduCDM import CDM
 from torch import nn
@@ -143,6 +143,9 @@ class DINA(CDM):
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()
+        precision = BinaryPrecision()
+        recall = BinaryRecall()
+        f1 = BinaryF1Score()
         self.dina_net = self.dina_net.to(device)
         self.dina_net.eval()
         y_pred = []
@@ -161,9 +164,12 @@ class DINA(CDM):
 
         self.dina_net.train()
         metric.update(torch.tensor(y_pred), torch.tensor(y_true))
+        precision.update(torch.tensor(y_pred), torch.tensor(y_true))
+        recall.update(torch.tensor(y_pred), torch.tensor(y_true))
+        f1.update(torch.tensor(y_pred), torch.tensor(y_true))
         correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
         rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
-        return correctness, np.array((users)),metric.compute().item(),rmse
+        return correctness, np.array((users)),metric.compute().item(),rmse, precision.compute().item(), recall.compute().item(), f1.compute().item()
 
     def save(self, filepath):
         torch.save(self.dina_net.state_dict(), filepath)

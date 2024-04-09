@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-from torcheval.metrics import metric, BinaryAUROC, BinaryPrecision, BinaryRecall
+from torcheval.metrics import metric, BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score
 from EduCDM import CDM
@@ -129,6 +129,7 @@ class NCDM(CDM):
         metric = BinaryAUROC()
         precision = BinaryPrecision()
         recall = BinaryRecall()
+        f1 = BinaryF1Score()
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
         y_true, y_pred, users = [], [], []
@@ -145,10 +146,11 @@ class NCDM(CDM):
         metric.update(torch.tensor(y_pred), torch.tensor(y_true))
         precision.update(torch.tensor(y_pred), torch.tensor(y_true))
         recall.update(torch.tensor(y_pred), torch.tensor(y_true))
+        f1.update(torch.tensor(y_pred), torch.tensor(y_true))
         self.ncdm_net.train()
         correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
         rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
-        return correctness, np.array((users)), metric.compute().item(), rmse, precision.compute().item(), recall.compute().item()
+        return correctness, np.array((users)), metric.compute().item(), rmse, precision.compute().item(), recall.compute().item(), f1.compute().item()
 
     def save(self, filepath):
         torch.save(self.ncdm_net.state_dict(), filepath)
