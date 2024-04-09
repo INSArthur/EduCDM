@@ -4,7 +4,7 @@
 import logging
 import numpy as np
 import torch
-from torcheval.metrics import BinaryAUROC
+from torcheval.metrics import BinaryAUROC, BinaryPrecision, BinaryRecall
 from tqdm import tqdm
 from torch import nn
 from EduCDM import CDM
@@ -92,6 +92,8 @@ class MCD(CDM):
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()
+        precision = BinaryPrecision()
+        recall = BinaryRecall()
         self.mf_net = self.mf_net.to(device)
         self.mf_net.eval()
         y_pred = []
@@ -108,9 +110,11 @@ class MCD(CDM):
 
         self.mf_net.train()
         metric.update(torch.tensor(y_pred), torch.tensor(y_true))
+        precision.update(torch.tensor(y_pred), torch.tensor(y_true))
+        recall.update(torch.tensor(y_pred), torch.tensor(y_true))
         correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
         rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
-        return correctness, np.array((users)), metric.compute().item(), rmse
+        return correctness, np.array((users)), metric.compute().item(), rmse, precision.compute().item(), recall.compute().item()
 
     def save(self, filepath):
         torch.save(self.mf_net.state_dict(), filepath)

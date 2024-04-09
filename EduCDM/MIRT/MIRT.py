@@ -5,7 +5,7 @@ import math
 import logging
 import numpy as np
 import torch
-from torcheval.metrics import BinaryAUROC
+from torcheval.metrics import BinaryAUROC, BinaryPrecision, BinaryRecall
 
 from EduCDM import CDM
 from torch import nn
@@ -149,6 +149,8 @@ class MIRT(CDM):
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()
+        precision = BinaryPrecision()
+        recall = BinaryRecall()
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()
         y_pred = []
@@ -164,10 +166,12 @@ class MIRT(CDM):
             users.extend(user_id.tolist())
 
         metric.update(torch.tensor(y_pred), torch.tensor(y_true))
+        precision.update(torch.tensor(y_pred), torch.tensor(y_true))
+        recall.update(torch.tensor(y_pred), torch.tensor(y_true))
         self.irt_net.train()
         correctness = (np.array(y_true) == (np.array(y_pred) >= 0.5))
         rmse = np.sqrt(np.mean(np.power(np.array(y_true) - np.array(y_pred), 2)))
-        return correctness, np.array((users)),metric.compute().item(),rmse
+        return correctness, np.array((users)),metric.compute().item(),rmse, precision.compute().item(), recall.compute().item()
 
     def save(self, filepath):
         torch.save(self.irt_net.state_dict(), filepath)
