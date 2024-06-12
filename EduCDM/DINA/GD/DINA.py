@@ -91,8 +91,6 @@ class DINA(CDM):
         else:
             self.dina_net = DINANet(user_num, item_num, hidden_dim)
 
-        self.common = common
-
     def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001,eval_freq=5,quit_delta=30) -> ...:
         self.dina_net = self.dina_net.to(device)
         loss_function = nn.BCELoss()
@@ -124,7 +122,7 @@ class DINA(CDM):
 
             if test_data is not None and e %eval_freq == 0:
                 correctness,users,auc,rmse = self.eval(test_data, device=device)
-                acc = self.common.evaluate_overall_acc(correctness)
+                acc = self.evaluate_overall_acc(correctness)
                 #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
                 if acc> best_acc :
@@ -139,7 +137,7 @@ class DINA(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.dina_net.theta.weight.data.numpy(), self.dina_net.guess.weight.data.numpy()
+            return self.dina_net.theta.weight.data.numpy(), np.concatenate([self.dina_net.guess.weight.data.numpy(),self.dina_net.guess.weight.data.numpy()],axis=1)
 
     def eval(self, test_data, device="cpu") -> tuple:
         metric = BinaryAUROC()

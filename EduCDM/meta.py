@@ -1,5 +1,6 @@
 # coding: utf-8
 # 2021/3/17 @ tongshiwei
+import numpy as np
 
 
 def etl(*args, **kwargs) -> ...:  # pragma: no cover
@@ -32,3 +33,6 @@ class CDM(object):
 
     def load(self, *args, **kwargs) -> ...:
         raise NotImplementedError
+
+    def evaluate_overall_acc(self, correctness: np.array):
+        return np.sum(correctness) / correctness.shape[0]

@@ -72,7 +72,6 @@ class NCDM(CDM):
     def __init__(self, knowledge_n, exer_n, student_n, common=None):
         super(NCDM, self).__init__()
         self.ncdm_net = Net(knowledge_n, exer_n, student_n)
-        self.common = common
 
     def train(self, train_data, test_data=None, epoch=10, device="cpu", lr=0.002, silence=False,eval_freq=5,quit_delta=30):
         self.ncdm_net = self.ncdm_net.to(device)
@@ -106,7 +105,7 @@ class NCDM(CDM):
 
             if test_data is not None and e % eval_freq == 0:
                 correctness, users, auc, rmse = self.eval(test_data, device=device)
-                acc = self.common.evaluate_overall_acc(correctness)
+                acc = self.evaluate_overall_acc(correctness)
 
 
                 if acc > best_acc:
@@ -123,7 +122,7 @@ class NCDM(CDM):
             best_metrics.append(best_ite)
             return best_metrics
         else :
-            return self.ncdm_net.student_emb.weight.data.numpy(),self.ncdm_net.e_difficulty.weight.data.numpy()
+            return self.ncdm_net.student_emb.weight.data.numpy(),self.ncdm_net.k_difficulty.weight.data.numpy()
 
     def eval(self, test_data, device="cpu"):
         metric = BinaryAUROC()

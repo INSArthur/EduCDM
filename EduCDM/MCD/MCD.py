@@ -41,8 +41,6 @@ class MCD(CDM):
         super(MCD, self).__init__()
         self.mf_net = MFNet(user_num, item_num, latent_dim)
 
-        self.common = common
-
     def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001,eval_freq=5,quit_delta=30) -> ...:
         self.mf_net = self.mf_net.to(device)
         loss_function = nn.BCELoss()
@@ -73,7 +71,7 @@ class MCD(CDM):
 
             if test_data is not None and e %eval_freq == 0:
                 correctness,users,auc,rmse = self.eval(test_data, device=device)
-                acc = self.common.evaluate_overall_acc(correctness)
+                acc = self.evaluate_overall_acc(correctness)
                 #print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
                 if acc> best_acc :
